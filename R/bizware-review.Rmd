@@ -1,0 +1,72 @@
+---
+title: "DOE: Review"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+## initial settings
+knitr::opts_chunk$set(comment=NA, echo=FALSE, error = TRUE, cache=FALSE, message=FALSE, warning=FALSE)
+
+## width to use when printing tables etc.
+options(width = 250)
+
+## make all required libraries available by loading radiant package if needed
+if (!"package:radiant" %in% search()) library(radiant)
+
+## finding the path to the class dropbox folder
+fp <- file.path(find_dropbox(),"MGTA455-2017")
+bizware <- readxl::read_excel(file.path(fp, "data/bizware.xlsx")) %>% na.omit
+```
+
+## Experimental design and partial factorials
+
+### Generate a partial factorial design using information from the response table shown.
+
+The smallest appropriate partial factorial has 8 trials (i.e., the solution with 8 trials has a perfect D-efficiency score equal to 1, no correlation between the variables (i.e., a determinant of 1), and is balanced (i.e., `trial` and `gift` both occur in 4 trials, `speed` and `power` both occur in 4 trials, and `$150`, `$160`, `$170`, and `$180` each occur in 2 trials).   
+
+```{r}
+fcts <- "price; $150; $160; $170; $180
+message; speed; power
+promotion; trial; gift"
+result <- doe(fcts, seed = 172110)
+summary(result)
+```
+
+Recall that multiple partial factorials may exist that "solve" the experimental design problem.
+
+## Estimate a logistic regression based on the response table shown and predict response for all profiles
+
+Open the `bizware.xlsx` file. After copy-and-pasting the data into Radiant we first need to create a _positive_ and _negative response_ variables. Then we can `gather` the data and estimate the logistic regression using (frequency) weights.
+
+```{r}
+## create new variable(s)
+bizware <- mutate(bizware, yes = 2000 * response, no = 2000 - yes)
+
+## Gather columns
+bizware_gathered <- gather(bizware, resp, freq, yes, no, factor_key = TRUE)
+```
+
+The results from the logistic regression models are given below.
+
+```{r}
+result <- logistic(bizware_gathered, rvar = "resp", evar = c("price", "message", "promotion"), lev = "yes", wts = "freq")
+summary(result)
+```
+
+The easiest way to generate predictions for all possible profiles (trials) if to use `expand.grid` and select the newly created dataset for prediction.
+
+```{r}
+## expanding data
+bizware_gathered_expand <- expand.grid(level_list(bizware_gathered, price, message, promotion))
+```
+
+```{r}
+result <- logistic(bizware_gathered, rvar = "resp", evar = c("price", "message", "promotion"), lev = "yes", wts = "freq")
+summary(result)
+pred <- predict(result, pred_data = "bizware_gathered_expand", prn = 16)
+store(pred, data = "bizware_gathered_expand", name = "pred_logit")
+print(bizware_gathered_expand)
+```
+
+See also the following <a href="https://www.youtube.com/watch?v=bdFDAu18O20" target="_blank">tutorial video</a>.
+
